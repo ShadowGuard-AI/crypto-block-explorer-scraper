@@ -1,3 +1,5 @@
+![Banner](banner.png)
+
 # crypto-block-explorer-scraper
 Scrapes and aggregates data from multiple block explorer APIs (e.g., Etherscan, Blockchair) for a given cryptocurrency address or transaction hash, providing a consolidated view of its activity and history. - Focused on Basic cryptographic operations
 
