@@ -23,6 +23,11 @@ ETHERSCAN_API_KEY = os.environ.get("ETHERSCAN_API_KEY")  # Securely retrieve API
 ETHERSCAN_RATE_LIMIT = 5  # Etherscan allows 5 requests/second for free tier
 BLOCKCHAIR_API_URL = 'https://api.blockchair.com/ethereum/'
 BLOCKCHAIR_RATE_LIMIT = 2  # Blockchair rate limit is around 2 requests/second. Check their API docs
+# Both fetchers turn a RequestException into a logged None, but without a
+# timeout a server that accepts the connection and never answers hangs
+# the CLI forever instead of failing that way. Ten seconds is well above
+# either API's normal response time.
+API_TIMEOUT_SECONDS = 10
 
 # Global variable to track last API call time
 # One timestamp is shared by both APIs, so a call to one also delays the
@@ -60,7 +65,7 @@ def fetch_etherscan_data(address, api_key=ETHERSCAN_API_KEY):
         rate_limit("Etherscan", ETHERSCAN_RATE_LIMIT)
         url = f"{ETHERSCAN_API_URL}?module=account&action=txlist&address={address}&startblock=0&endblock=99999999&sort=asc&apikey={api_key}"
 
-        response = requests.get(url)
+        response = requests.get(url, timeout=API_TIMEOUT_SECONDS)
         response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
         data = response.json()
 
@@ -88,7 +93,7 @@ def fetch_blockchair_data(address):
 
         url = urljoin(BLOCKCHAIR_API_URL, f"dashboards/address/{address}")  # Use urljoin for proper URL construction
 
-        response = requests.get(url)
+        response = requests.get(url, timeout=API_TIMEOUT_SECONDS)
         response.raise_for_status()
         data = response.json()
         address_data = data['data'][address]['transactions']
