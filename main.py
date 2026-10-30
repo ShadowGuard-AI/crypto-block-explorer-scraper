@@ -1,6 +1,7 @@
 import argparse
 import logging
 import json
+import sys
 import time
 from urllib.parse import urljoin
 
@@ -24,6 +25,9 @@ BLOCKCHAIR_API_URL = 'https://api.blockchair.com/ethereum/'
 BLOCKCHAIR_RATE_LIMIT = 2  # Blockchair rate limit is around 2 requests/second. Check their API docs
 
 # Global variable to track last API call time
+# One timestamp is shared by both APIs, so a call to one also delays the
+# other. That is stricter than either limit on its own, but it keeps the
+# bookkeeping to a single value and neither free tier is hurt by waiting.
 last_api_call_time = 0
 
 
@@ -227,12 +231,18 @@ def main():
 
         aggregated_data = aggregate_data(etherscan_data, blockchair_data)
 
+        if not aggregated_data:
+            # Both sources failed. Printing an empty object with a success
+            # exit used to make a total failure look like an empty address.
+            logging.error("No data could be fetched from either source.")
+            sys.exit(1)
+
         print(json.dumps(aggregated_data, indent=4)) # Output JSON for easy readability
 
     elif args.hash_password:
         if not args.password:
             logging.error("Please provide a password to hash using --password.")
-            return
+            sys.exit(1)
         salt, hashed_password = hash_password(args.password)
         print(f"Salt: {salt}")
         print(f"Hashed Password: {hashed_password}")
@@ -242,11 +252,22 @@ def main():
         if verify_password(password, salt, hashed_password):
             print("Password verified successfully!")
         else:
+            # A mismatch is a result, not a crash, but scripts checking the
+            # exit code should still be able to tell the two outcomes apart.
             print("Password verification failed.")
+            sys.exit(1)
 
     elif args.encrypt:
         message, key = args.encrypt
-        encrypted_message = encrypt_message(message, key)
+        try:
+            encrypted_message = encrypt_message(message, key)
+        except Exception as e:
+            # A short or non-base64 key used to escape as a raw traceback
+            # here, while the decrypt branch below reported the same kind
+            # of problem cleanly. Both branches now behave the same way.
+            logging.error(f"Encryption failed: {e}")
+            print("Encryption failed. Check your key.")
+            sys.exit(1)
         print(f"Encrypted message: {encrypted_message}")
 
     elif args.decrypt:
@@ -257,6 +278,7 @@ def main():
         except Exception as e:
             logging.error(f"Decryption failed: {e}")
             print("Decryption failed. Check your key and ciphertext.")
+            sys.exit(1)
 
     elif args.generate_key:
         key = generate_aes_key()
