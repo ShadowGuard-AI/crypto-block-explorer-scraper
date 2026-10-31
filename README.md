@@ -11,6 +11,7 @@ Scrapes and aggregates data from multiple block explorer APIs (e.g., Etherscan, 
 
 ## Parameters
 - `--address`: The cryptocurrency address to search for.
+- `--txhash`: The transaction hash to search for. Queried as a transaction at both APIs, not as an address.
 - `--password`: Password to use for crypto operations. WARNING: Use with extreme caution. Avoid using plaintext passwords on CLI, consider using other secure methods.
 - `--hash_password`: Hashes a password. Requires --password.
 - `--verify_password`: No description provided

@@ -112,6 +112,60 @@ def fetch_blockchair_data(address):
         return None
 
 
+def fetch_etherscan_tx_data(txhash, api_key=ETHERSCAN_API_KEY):
+    """
+    Fetches a single transaction from Etherscan using the proxy
+    eth_getTransactionByHash route, so a transaction hash is queried
+    as a transaction and not spent as an address.
+    """
+    if not api_key:
+        logging.error("Etherscan API key not found. Please set the ETHERSCAN_API_KEY environment variable.")
+        return None
+    try:
+        rate_limit("Etherscan", ETHERSCAN_RATE_LIMIT)
+        url = f"{ETHERSCAN_API_URL}?module=proxy&action=eth_getTransactionByHash&txhash={txhash}&apikey={api_key}"
+        response = requests.get(url, timeout=API_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        data = response.json()
+        result = data.get('result')
+        if result:
+            logging.info(f"Successfully fetched Etherscan transaction data for hash: {txhash}")
+            return result
+        logging.warning(f"Etherscan API error for transaction {txhash}: {data.get('message', data)}")
+        return None
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching Etherscan transaction data for hash {txhash}: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"An unexpected error occurred while fetching Etherscan transaction data for hash {txhash}: {e}")
+        return None
+
+
+def fetch_blockchair_tx_data(txhash):
+    """
+    Fetches a single transaction from Blockchair using its transaction
+    dashboard route.
+    """
+    try:
+        rate_limit("Blockchair", BLOCKCHAIR_RATE_LIMIT)
+        url = urljoin(BLOCKCHAIR_API_URL, f"dashboards/transaction/{txhash}")
+        response = requests.get(url, timeout=API_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        data = response.json()
+        tx_data = data['data'][txhash]
+        logging.info(f"Successfully fetched Blockchair transaction data for hash: {txhash}")
+        return tx_data
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching Blockchair transaction data for hash {txhash}: {e}")
+        return None
+    except KeyError as e:
+        logging.error(f"KeyError while parsing Blockchair transaction data for hash {txhash}: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"An unexpected error occurred while fetching Blockchair transaction data for hash {txhash}: {e}")
+        return None
+
+
 def aggregate_data(etherscan_data, blockchair_data):
     """
     Aggregates data from different sources.
@@ -205,6 +259,7 @@ def setup_argparse():
     """
     parser = argparse.ArgumentParser(description='Scrapes and aggregates data from multiple block explorer APIs.')
     parser.add_argument('--address', type=str, help='The cryptocurrency address to search for.')
+    parser.add_argument('--txhash', type=str, help='The transaction hash to search for. Queried as a transaction at both APIs, not as an address.')
     parser.add_argument('--password', type=str, help='Password to use for crypto operations. WARNING: Use with extreme caution. Avoid using plaintext passwords on CLI, consider using other secure methods.')
     parser.add_argument('--hash_password', action='store_true', help='Hashes a password. Requires --password.')
     parser.add_argument('--verify_password', nargs=3, metavar=('password', 'salt', 'hashed_password'), help='Verifies a password. Requires password, stored salt, and stored hashed password.')
@@ -243,6 +298,16 @@ def main():
             sys.exit(1)
 
         print(json.dumps(aggregated_data, indent=4)) # Output JSON for easy readability
+
+    elif args.txhash:
+        logging.info(f"Scraping data for transaction hash: {args.txhash}")
+        etherscan_data = fetch_etherscan_tx_data(args.txhash)
+        blockchair_data = fetch_blockchair_tx_data(args.txhash)
+        aggregated_data = aggregate_data(etherscan_data, blockchair_data)
+        if not aggregated_data:
+            logging.error("No data could be fetched from either source.")
+            sys.exit(1)
+        print(json.dumps(aggregated_data, indent=4))
 
     elif args.hash_password:
         if not args.password:
@@ -300,6 +365,7 @@ if __name__ == "__main__":
 
 # 1.  Basic scraping (Requires ETHERSCAN_API_KEY environment variable to be set):
 # python main.py --address 0xdAC17F958D2ee523a2206206994597C13D831ec7
+# python main.py --txhash 0x0000000000000000000000000000000000000000000000000000000000000001
 
 # 2. Hashing a password:
 # python main.py --hash_password --password "mysecretpassword"
