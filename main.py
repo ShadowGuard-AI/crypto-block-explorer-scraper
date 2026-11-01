@@ -91,6 +91,9 @@ def fetch_blockchair_data(address):
     try:
         rate_limit("Blockchair", BLOCKCHAIR_RATE_LIMIT)
 
+        # I place the address into the path as given. No format check
+        # runs on it here, so a mistyped address is an API error from
+        # Blockchair, not a message from this program.
         url = urljoin(BLOCKCHAIR_API_URL, f"dashboards/address/{address}")  # Use urljoin for proper URL construction
 
         response = requests.get(url, timeout=API_TIMEOUT_SECONDS)
@@ -172,6 +175,9 @@ def aggregate_data(etherscan_data, blockchair_data):
     """
     aggregated_data = {}
     if etherscan_data:
+        # I keep whichever sources answered. The result carries no
+        # marker saying a source is missing, so a one source answer
+        # and a two source answer differ only in which keys exist.
         aggregated_data['etherscan'] = etherscan_data
     if blockchair_data:
         aggregated_data['blockchair'] = blockchair_data
@@ -229,6 +235,10 @@ def encrypt_message(message, key):
     encryptor = cipher.encryptor()
     ciphertext = encryptor.update(padded_data) + encryptor.finalize()
 
+    # I put the IV in front of the ciphertext before encoding, so
+    # the one string a user saves holds everything decryption
+    # needs besides the key. The decrypt side splits it back off
+    # at the same fixed 16 bytes.
     return base64.b64encode(iv + ciphertext).decode('utf-8')
 
 
